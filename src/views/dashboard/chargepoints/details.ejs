@@ -1,0 +1,365 @@
+<% layout('../../layouts/main') -%>
+<% block('title', `CP #${cp.cpid} (${cp.name})`) -%>
+<% script(`https://cdn.jsdelivr.net/npm/vue${process.env.NODE_ENV === 'production' ? '@2.6.11' : '/dist/vue.js'}`) -%>
+<% script('https://cdn.jsdelivr.net/npm/axios@0.20.0/dist/axios.min.js') -%>
+<% script('/socket.io/socket.io.js') -%>
+<% script('https://cdn.jsdelivr.net/npm/lodash@4.17.20/lodash.min.js') -%>
+<style>
+  .controlbox {
+    height: 40vh;
+    overflow: scroll;
+  }
+
+  .logsbox {
+    height: 50vh;
+  }
+
+  .logs {
+    background-color: black;
+    height: 100%;
+  }
+
+  .log {
+    color: white;
+  }
+
+  .log-success {
+    color: #4CAF50;
+  }
+
+  .log-danger {
+    color: #f44336;
+  }
+</style>
+
+<h1>Details of <%=cp.name%></h1>
+
+<% if (cp.isDeployed) {%>
+<div id="app">
+  <div class="controlbox">
+    <div class="btn-group mt-4" role="group">
+      <button type="button" class="btn btn-success" @click="command('connect2csms')"
+         :disabled="disableConnect2CsmsButton()">Connect to Central System</button>
+      <button type="button" class="btn btn-danger" @click="command('disconnect4Mcsms')"
+        :disabled="!cp.state.connected">Disconnect from Central System</button>
+      <button type="button" class="btn btn-primary" @click="command('send.BootNotification')" :disabled="disableSendBootNotification()">Send
+        BootNotification</button>
+      <button type="button" class="btn btn-secondary" @click="command('send.Heartbeat')" :disabled="disableSendHeartBeat()">Send Heartbeat</button>
+    </div>
+  
+    <div class="mt-4">
+      <h4>User actions</h4>
+  
+      <div class="row">
+        <div class="col-2 py-2">
+          Charge Point
+        </div>
+        <div class="col">
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-secondary" @click="command('reboot')" :disabled="disableReboot()">Reboot</button>
+            <button v-if="cp.state.power === 'on'" type="button" class="btn btn-outline-danger" @click="command('disconnectPower')">Disconnect power</button>
+            <button v-if="cp.state.power === 'off'" type="button" class="btn btn-outline-primary" @click="command('connectPower')">Connect power</button>
+            <button type="button" class="btn btn-outline-danger" :disabled="disableEmergencyStop()">Emergency stop</button>
+          </div>
+        </div>
+      </div>
+      <div v-for="connector in cp.state.connectors" :key="connector.id" class="row">
+        <div class="col-2 py-2">Connector {{ connector.id }}</div>
+        <div class="col">
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-secondary"
+              @click="command('connector.plugin', { id: connector.id })" :disabled="disablePlugIn(connector.id)">Plug in</button>
+            <button type="button" class="btn btn-outline-secondary"
+              @click="unplug(connector.id)" :disabled="disableUnplug(connector.id)" :title="displayUnPlugToolTip(connector.id)">Unplug</button>
+            <button type="button" class="btn btn-outline-secondary"
+              @click="chargeStart(connector.id)" :disabled="disableChargeStart(connector.id)">Charge start</button>
+            <button type="button" class="btn btn-outline-secondary"
+              @click="stopCharge(connector.id)" :disabled="disableChargeStop(connector.id)">Stop charge</button>
+            <button type="button" class="btn btn-outline-secondary"  @click="command('connector.ChargingComplete', { id: connector.id })" :disabled="disableChargingComplete(connector.id)">Charging complete</button>
+            <button type="button" class="btn btn-outline-danger" data-toggle="modal" data-target="#staticBackdrop" :disabled="disableChargeFail()">Charge fail</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  
+     <div class="card mt-4" style="height: 300px;">
+      <div class="card-header">
+        Transactions
+      </div>
+      <div class="card-body" style="overflow-y: auto;">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Transaction Id</th>
+              <th>Charge Point Id</th>
+              <th>Connector Id</th>
+              <th>Id Tag</th>
+              <th>Started At</th>
+              <th>Ended At</th>
+              <th>Meter Start</th>
+              <th>Meter Stop</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="transaction in transactions" :key="transaction.id">
+              <td>{{transaction.id}}</td>
+              <td>{{transaction.cpid}}</td>
+              <td>{{transaction.connector_id}}</td>
+              <td>{{transaction.id_tag}}</td>
+              <td>{{transaction.started_at}}</td>
+              <td>{{transaction.ended_at}}</td>
+              <td>{{transaction.meter_start}}</td>
+              <td>{{transaction.meter_stop}}</td>
+            </tr>
+            
+          </tbody>
+        </table>
+      </div>
+    </div> 
+  
+    <div class="mt-4">
+      <h4>Status</h4>
+  
+      <table class="table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Charge point</th>
+            <td>
+              <div>Powered {{ cp.state.power }}</div>
+              <div>{{ cp.state.connected ? 'Connected to' : 'Disconnected from' }} central system</div>
+            </td>
+          </tr>
+          <tr v-for="connector in cp.state.connectors" :key="connector.id">
+            <th>Connector {{ connector.id }}</th>
+            <td>
+              {{ connector.status || '--' }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  
+    <div class="mt-4">
+      <div class="card" style="width: 200px;">
+        <div class="card-body">
+          <h3 class="text-success">Meter Value </h3>
+          <h4 style="display: inline; float: left;">{{cp.state.meterValue}} <span style="font-size: 15px;">WH</span></h4>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="logsbox">
+    <h4>Logs (newest on top)</h4>
+
+    <div class="logs">
+      <pre class="h-100 p-2" id="logs_pre"><div v-for="(log, i) in logs" :key="i"
+        :class="['my-2', 'log', `log-${log.type}`]">[{{ log.time | humanDate }}] - {{ log.text }}</div></pre>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal fade" id="staticBackdrop" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Failure Cases</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <button type="button" class="btn btn-outline-danger btn-lg btn-block">Lock Failure</button>
+          <button type="button" class="btn btn-outline-danger btn-lg btn-block">Communication Error</button>
+          <button type="button" class="btn btn-outline-danger btn-lg btn-block">Ground Failure</button>
+          <button type="button" class="btn btn-outline-danger btn-lg btn-block">High Temperature</button>
+          <button type="button" class="btn btn-outline-danger btn-lg btn-block">Internal Error</button>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="my-4"></div>
+
+<script>
+  // Socket.IO
+  const socket = io('/cp/<%=cp.cpid%>');
+
+  // Vue
+  const app = new Vue({
+    filters: {
+      humanDate: (date) => localDate(date, true),
+    },
+    el: '#app',
+    data: {
+      cp: JSON.parse(`<%-JSON.stringify(cp)%>`),
+      logs: [],
+      fetchingTransactions: false,
+      transactions: [],
+      ongoingTransactions: [],
+    },
+    created: function () {
+      socket.on('log', (log) => this.logs.unshift(log));
+      socket.on('state_change', ({ path, value }) => Vue.set(this.cp.state, path, value));
+      socket.on('state_replace', (newState) => Vue.set(this.cp, 'state', newState));
+      socket.on('transaction_added', (newTransaction) => this.addTransaction(newTransaction));
+      socket.on('transaction_modified', (modifiedTransaction) => this.modifyTransaction(modifiedTransaction));
+      socket.on('transaction_removed', (transaction) => this.removeTransaction(transaction));
+      socket.on('rebooted', () => this.afterReboot());
+      this.fetchTransactions();
+    },
+    computed: {
+      reversedLogs: function () {
+        return this.logs.slice().reverse();
+      }
+    },
+    mounted () {
+      // Detect when scrolled to bottom.
+      let pageNum = 1;
+      const listElm = document.querySelector('#logs_pre');
+      listElm.addEventListener('scroll', e => {
+        if(listElm.scrollTop + listElm.clientHeight >= listElm.scrollHeight) {
+          pageNum = pageNum + 1;
+          this.fetchLogs(pageNum);
+        }
+      });
+      // Initially load some logs.
+      this.fetchLogs(pageNum);
+    },
+    methods: {
+      command: function (type, params = {}) {
+        socket.emit('command', { type, params });
+      },
+      reboot(){
+        this.command('reboot');
+      },
+      async fetchTransactions() {
+        this.fetchingTransactions = true;
+        const result = await axios.get(`/dashboard/chargepoints/transactions/${this.cp.cpid}`).then((res) => res.data);
+        this.transactions = result;
+        this.fetchingTransactions = false;
+      },
+      addTransaction(newTransaction){
+        this.ongoingTransactions.unshift(newTransaction);
+        this.transactions.unshift(newTransaction);
+      },
+      chargeStart(connectorId){
+        let idToken = prompt("Please enter your Id Tag")
+        this.command('connector.StartTransaction', { id: connectorId, id_tag: idToken  })
+      },
+      disablePlugIn(connectorId){
+        const connectors = _.get(this.cp, 'state.connectors');
+        const connector = _.find(connectors, (c) => c.id === connectorId);
+        if(connector.status === 'Charging' || connector.status === 'Preparing' || connector.status === 'SuspendedEV' || connector.status === 'SuspendedEVSE'){
+          return true;
+        }
+        return false;
+      },
+      disableUnplug(connectorId){
+        const connectors = _.get(this.cp, 'state.connectors');
+        const connector = _.find(connectors, (c) => c.id === connectorId);
+        if(connector.status === 'Charging' && connector.auto_lock === 1){
+          return true;
+        } else if(connector.status === 'Available'){
+          return true
+        }
+        return false;
+      },
+      disableChargeStart(connectorId){
+        const connectors = _.get(this.cp, 'state.connectors');
+        const connector = _.find(connectors, (c) => c.id === connectorId);
+        if(connector.status === 'Charging' || this.cp.state.power !== 'on' || connector.status === 'Available' || !connector.status){
+          return true;
+        }
+        return false;
+      },
+      stopCharge(connectorId){
+        let idToken = prompt("Please enter your Id Tag");
+        //Find the transaction
+        const transaction = _.find(this.ongoingTransactions, (oT) => oT.connector_id === connectorId);
+        this.command('connector.StopTransaction', { id: connectorId, id_tag: idToken, transaction_id: _.get(transaction, 'id'), started_at: _.get(transaction, 'started_at') });
+      },
+      disableChargeStop(connectorId){
+        const connectors = _.get(this.cp, 'state.connectors');
+        const connector = _.find(connectors, (c) => c.id === connectorId);
+        if(connector.status !== 'Charging' || connector.status === 'Preparing' || connector.status === 'SuspendedEVSE'){
+          return true;
+        }
+        return false;
+      },
+      modifyTransaction(transaction){
+        const indexofTransaction = _.findIndex(this.transactions, (t) => t.id.toString() === _.get(transaction, 'id'));
+        this.transactions.splice(indexofTransaction, 1, transaction);
+      },
+      removeTransaction(transaction){
+        const newOngoingTransactions = _.remove(this.ongoingTransactions, (oT) => oT.id !== _.get(transaction, 'id'));
+        this.ongoingTransactions = newOngoingTransactions;
+      },
+      unplug(connectorId){
+        let idToken = prompt("Please enter your Id Tag");
+        //Find the transaction
+        const transaction = _.find(this.ongoingTransactions, (oT) => oT.connector_id === connectorId && oT.id_tag === idToken);
+        this.command('connector.Unplug', { id: connectorId, id_tag: idToken, transaction_id: _.get(transaction, 'id'), started_at: _.get(transaction, 'started_at') });
+      },
+      disableChargingComplete(connectorId){
+        const connectors = _.get(this.cp, 'state.connectors');
+        const connector = _.find(connectors, (c) => c.id === connectorId);
+        if(connector.status === 'SuspendedEV' || connector.status === 'Preparing' || connector.status === 'Charging' || connector.status === 'Available'){
+          return true;
+        }
+        return false;
+      },
+      displayUnPlugToolTip(connectorId){
+        const connectors = _.get(this.cp, 'state.connectors');
+        const connector = _.find(connectors, (c) => c.id === connectorId);
+        if(connector.auto_lock === 1){
+          return 'Charge Point locked';
+        }
+        return '';
+      },
+      async fetchLogs(pagenum){
+        const logs = await axios.get(`/dashboard/chargepoints/${this.cp.cpid}/fetchLogs`, {
+          params:{
+            pageNum: pagenum,
+          }
+        }).then((res) => res.data);
+        const tempLogs = this.logs.concat(logs);
+        this.logs = tempLogs;
+      },
+      disableConnect2CsmsButton(){
+        return this.cp.state.power !== 'on' || this.cp.state.connected;
+      },
+      disableSendBootNotification(){
+        return this.cp.state.power !== 'on' || !this.cp.state.connected;
+      },
+      disableReboot(){
+        return this.cp.state.power !== 'on';
+      },
+      disableEmergencyStop(){
+        return this.cp.state.power !== 'on';
+      },
+      disableSendHeartBeat(){
+        return this.cp.state.power !== 'on' || !this.cp.state.connected;
+      },
+      disableChargeFail(){
+        return this.cp.state.power !== 'on' || !this.cp.state.connected;
+      }
+    }
+  });
+</script>
+<% } else { %>
+<form action="/dashboard/chargepoints/deploy" method="post" class="my-3" onsubmit="return confirm('Deploy this CP?')">
+  <input type="hidden" name="cpid" value="<%=cp.cpid%>">
+  <button class="btn btn-success">Deploy</button>
+</form>
+<% } %>

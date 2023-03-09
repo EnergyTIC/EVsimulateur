@@ -1,0 +1,77 @@
+<% layout('../../layouts/main') -%>
+<% block('title', 'Undeployed CPs') -%>
+<% script(`https://cdn.jsdelivr.net/npm/vue${process.env.NODE_ENV === 'production' ? '@2.6.11' : '/dist/vue.js'}`) -%>
+<% script('https://cdn.jsdelivr.net/npm/axios@0.20.0/dist/axios.min.js') -%>
+<% script('https://cdn.jsdelivr.net/npm/lodash@4.17.20/lodash.min.js') -%>
+
+<style>
+  .edit {
+    color: white;
+    text-decoration: none;
+    
+  }
+  .edit:hover {
+    color: white;
+    text-decoration: none;
+  }
+</style>
+
+<h1>Undeployed Chargepoints</h1>
+<div id="appUndep">
+  <div v-if="errorMsg" class="alert alert-danger my-2" role="alert">
+    {{ errorMsg }}
+  </div>
+  <table class="table mt-4">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>OCPP version</th>
+        <th>CSMS</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+     
+        <tr v-for="cp in cps" :key="cp.id">
+          <td><a :href="'/dashboard/chargepoints/details/' + cp.id">{{cp.id}}</a></td>
+          <td>{{cp.name}}</td>
+          <td>{{cp.ocpp_v}}</td>
+          <td>{{cp.csms_endpoint}}</td>
+          <td>
+            <a class="btn btn-primary" :href="'/dashboard/chargepoints/edit/' + cp.id">Edit</a>
+            <button class="btn btn-danger" @click="deleteChargepoint(cp.id)" :disabled="deleting">Delete</button>
+          </td>
+        </tr>
+      
+    </tbody>
+  </table>
+</div>
+
+<script>
+  const app = new Vue({
+    el:"#appUndep",
+    data:{
+      cps: JSON.parse(`<%-JSON.stringify(cps)%>`),
+      errorMsg: '',
+      deleting: false,
+    },
+    methods:{
+      async deleteChargepoint(cpid){
+        try{
+          this.errorMsg = '';
+          this.deleting = true;
+          if(confirm(`Are you sure , you want to delete the Chargepoint ${cpid}`)){
+            await axios.post(`/dashboard/chargepoints/delete/${cpid}`);
+            window.location.reload();
+          }
+        }catch(error){
+          const msg = _.get(error, 'response.data.message', 'Unable to Delete Charger');
+          this.errorMsg = msg;
+        }
+        this.deleting = false;
+      }
+    }
+  });
+</script>
+

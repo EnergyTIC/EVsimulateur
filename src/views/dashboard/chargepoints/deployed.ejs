@@ -1,0 +1,55 @@
+<% layout('../../layouts/main') -%>
+<% block('title', 'Deployed CPs') -%>
+<% script(`https://cdn.jsdelivr.net/npm/vue${process.env.NODE_ENV === 'production' ? '@2.6.11' : '/dist/vue.js'}`) -%>
+<% script('/socket.io/socket.io.js') -%>
+<% script('https://cdn.jsdelivr.net/npm/axios@0.20.0/dist/axios.min.js') -%>
+<% script('https://cdn.jsdelivr.net/npm/lodash@4.17.20/lodash.min.js') -%>
+
+<h1>Deployed Chargepoints</h1>
+
+<div id="app">
+  <table class="table mt-4">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>OCPP version</th>
+        <th>CSMS</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      
+        <tr v-for="cp in cps" :key="cp.id">
+          <td><a :href="'/dashboard/chargepoints/details/' + cp.id">{{cp.id}}</a></td>
+          <td>{{cp.name}}</td>
+          <td>{{cp.ocpp_v}}</td>
+          <td>{{cp.csms_endpoint}}</td>
+          <td><button class="btn btn-danger" @click="undeploy(cp.id)">Undeploy</button></td>
+        </tr>
+      
+    </tbody>
+  </table>
+</div>
+
+
+<script>
+  const app = new Vue({
+    el: '#app',
+    data:{
+      cps: JSON.parse(`<%-JSON.stringify(cps)%>`),
+    },
+    methods:{
+      command: function (type, params = {}, optionalParams = {}) {
+        io(`/cp/${optionalParams.cpid}`).emit('command', { type, params });
+      },
+      async undeploy(cpid){
+        if(confirm(`Are you sure , you want to Undeploy the Chargepoint ${cpid}`)){
+          this.command('undeploy', {}, {cpid: cpid});
+          await axios.post(`/dashboard/chargepoints/undeploy/${cpid}`)
+          window.location.reload()
+        }
+      }
+    }
+  })
+</script>

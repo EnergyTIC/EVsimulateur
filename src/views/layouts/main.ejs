@@ -1,0 +1,93 @@
+<% const menuItems = [ { label: 'Home', link: '/dashboard/' }, { heading:
+'Chargepoints' }, { label: 'Deployed', link: '/dashboard/chargepoints/deployed'
+}, { label: 'Undeployed', link: '/dashboard/chargepoints/undeployed' }, { label:
+'Create', link: '/dashboard/chargepoints/create' }, { heading: 'Admin' }, {
+label: 'Setup', link: '/dashboard/setup' }, { label: 'Logout', link: '/logout'
+}, ]; -%>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%-blocks.title%> | evolt Simulator</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/css/bootstrap.min.css"
+    />
+    <%-stylesheets%> <%-scripts%>
+    <script>
+      function localDate(date, seconds = false) {
+        if (!(date instanceof Date)) {
+          if (Number.isNaN(Date.parse(date))) return 'N/A';
+          date = new Date(date);
+        }
+        const allMonths = [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
+        const month = allMonths[date.getMonth()];
+        const day = date.getDate();
+        const year = date.getFullYear();
+        var hours = date.getHours();
+        var minutes = date.getMinutes();
+        var ampm = hours >= 12 ? 'pm' : 'am';
+        hours = hours % 12;
+        hours = hours ? hours : 12; // the hour '0' should be '12'
+        minutes = minutes < 10 ? '0' + minutes : minutes;
+        return `${day} ${month} ${year}, ${hours}:${minutes}${
+          seconds ? ':' + date.getSeconds() : ''
+        } ${ampm}`;
+      }
+    </script>
+  </head>
+
+  <body>
+    <div class="container mt-2">
+      <div class="row">
+        <div class="col border rounded">
+          <div class="p-4">
+            <a href="/dashboard/">
+              <img
+                src="/static/logo.png"
+                style="width: 100px"
+                alt="evolt LOGO"
+              />
+              <div
+                style="color: #d01e52; font-weight: bold; text-align: center"
+              >
+                Simulator
+              </div>
+            </a>
+          </div>
+
+          <% menuItems.forEach(item => { -%> <% if (item.heading) { -%>
+          <h6 class="mt-3"><%=item.heading%></h6>
+          <% } else { -%>
+          <a href="<%=item.link%>" class="nav-link"><%=item.label%></a>
+          <% } -%> <% }) -%>
+        </div>
+        <div class="col col-md-10 pt-3"><%-body -%></div>
+      </div>
+    </div>
+    <script
+      src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
+      integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx"
+      crossorigin="anonymous"
+    ></script>
+  </body>
+</html>

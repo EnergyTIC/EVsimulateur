@@ -1,0 +1,263 @@
+<% layout('../../layouts/main') -%> <% block('title', 'Build CP') -%> <%
+script(`https://cdn.jsdelivr.net/npm/vue${process.env.NODE_ENV === 'production'
+? '@2.6.11' : '/dist/vue.js'}`) -%> <%
+script('https://cdn.jsdelivr.net/npm/axios@0.20.0/dist/axios.min.js') -%> <%
+script('https://cdn.jsdelivr.net/npm/lodash@4.17.20/lodash.min.js') -%>
+
+<style>
+  fieldset {
+    margin-bottom: 32px;
+  }
+
+  legend {
+    margin-bottom: 32px;
+  }
+</style>
+
+<h1>Build Chargepoint</h1>
+
+<form class="my-4" id="build-form" @submit.prevent="submit">
+  <div v-if="errorMsg" class="alert alert-danger" role="alert">
+    {{ errorMsg }}
+  </div>
+
+  <fieldset>
+    <legend>Basic information</legend>
+
+    <div class="row">
+      <div class="col">
+        <div class="form-group">
+          <label for="cpid">Chargepoint ID*</label>
+          <input type="text" class="form-control" id="cpid" v-model="cp.cpid" />
+        </div>
+      </div>
+      <div class="col">
+        <div class="form-group">
+          <label for="serialnum">Serial no.</label>
+          <input
+            type="text"
+            class="form-control"
+            id="serialnum"
+            v-model="cp.serialnum"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="name">Name</label>
+      <input type="text" class="form-control" id="name" v-model="cp.name" />
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <div class="form-group">
+          <label for="vendor">Vendor*</label>
+          <input
+            type="text"
+            class="form-control"
+            id="vendor"
+            v-model="cp.vendor"
+          />
+        </div>
+      </div>
+      <div class="col">
+        <div class="form-group">
+          <label for="model">Model*</label>
+          <input
+            type="text"
+            class="form-control"
+            id="model"
+            v-model="cp.model"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="firmware-version">Firmware version</label>
+      <input
+        type="text"
+        class="form-control"
+        id="firmware-version"
+        v-model="cp.firmwareVersion"
+      />
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Connectors</legend>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Label*</th>
+          <th>DC/AC*</th>
+          <th>Lock while charging?*</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="(connector, i) in cp.connectors" :key="i + 1">
+          <td>{{ i + 1 }}</td>
+          <td>
+            <select class="form-control" v-model="connector.label">
+              <option value="">-SELECT-</option>
+              <option value="ccs">CCS</option>
+              <option value="chademo">ChaDeMo</option>
+              <option value="level2">Level 2</option>
+            </select>
+          </td>
+          <td>
+            <div>
+              <label>
+                <input type="radio" value="dc" v-model="connector.dcac" />
+                DC
+              </label>
+            </div>
+            <div>
+              <label>
+                <input type="radio" value="ac" v-model="connector.dcac" />
+                AC
+              </label>
+            </div>
+          </td>
+          <td>
+            <input type="checkbox" name="locked" v-model="connector.lock" />
+          </td>
+          <td>
+            <button
+              type="buttom"
+              class="btn btn-outline-danger"
+              @click="cp.connectors.splice(i, 1)"
+              :disabled="cp.connectors.length < 2"
+            >
+              &times;
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="d-flex justify-content-end">
+      <button
+        type="button"
+        class="btn btn-outline-secondary"
+        @click="newConnector"
+      >
+        + Add new
+      </button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>OCPP config</legend>
+
+    <div class="row">
+      <div class="col">
+        <div class="form-group">
+          <label for="ocpp-version">OCPP version*</label>
+          <select
+            class="form-control"
+            id="ocpp-version"
+            v-model="cp.ocppVersion"
+          >
+            <option value="ocpp1.6j">1.6 JSON</option>
+          </select>
+        </div>
+      </div>
+      <div class="col">
+        <div class="form-group">
+          <label for="meterValFreq">Meter value frequency (minutes)</label>
+          <input
+            type="number"
+            min="1"
+            class="form-control"
+            id="meterValFreq"
+            v-model.number="cp.meterValueFrequency"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Central system location*</label>
+
+      <input
+        type="url"
+        class="form-control"
+        v-model="csmsUrl"
+        placeholder="ws://"
+      />
+    </div>
+  </fieldset>
+
+  <div v-if="errorMsg" class="alert alert-danger my-2" role="alert">
+    {{ errorMsg }}
+  </div>
+
+  <div class="d-flex justify-content-center mt-5">
+    <button class="btn btn-primary">Submit</button>
+  </div>
+
+  <p>* - Required</p>
+</form>
+
+<script>
+  const connector = () => ({
+    label: '',
+    dcac: 'ac',
+    lock: true,
+  });
+
+  const form = new Vue({
+    el: '#build-form',
+    data: {
+      errorMsg: '',
+      cp: {
+        cpid: '',
+        serialnum: '',
+        name: '',
+        vendor: '',
+        model: '',
+        firmwareVersion: '',
+        connectors: [connector()],
+        ocppVersion: 'ocpp1.6j',
+        meterValueFrequency: 15,
+        cslocation: {
+          protocol: 'ws://',
+          hostname: '',
+          port: 80,
+        },
+      },
+      csmsUrl: '',
+    },
+    computed: {
+      csmsEndpoint: function () {
+        return `${this.cp.cslocation.protocol}${this.cp.cslocation.hostname}:${this.cp.cslocation.port}`;
+      },
+    },
+    methods: {
+      submit: async function () {
+        try {
+          this.errorMsg = '';
+          const result = await axios.post('/dashboard/chargepoints/create', {
+            ...this.cp,
+            cslocation: this.csmsUrl,
+          });
+          window.location = `/dashboard/chargepoints/details/${this.cp.cpid}`;
+        } catch (error) {
+          const msg = _.get(
+            error,
+            'response.data.message',
+            'Unable to create charger',
+          );
+          this.errorMsg = msg;
+        }
+      },
+      newConnector: function () {
+        this.cp.connectors.push(connector());
+      },
+    },
+  });
+</script>
